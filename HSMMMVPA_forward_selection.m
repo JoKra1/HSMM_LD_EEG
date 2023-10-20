@@ -1461,6 +1461,28 @@ likelis = loocv.likelihoods;
 
 tmp = loocv;
 
+%Plot recovered bump topologies
+load(strcat(saveTo,'chanlocs.mat'));
+best_bumps = tmp.bumps_final;
+
+topo = reconstruct(best_bumps,coeff10,latent10,mean(data));  % topologies
+
+Nbumps = size(best_bumps,2);
+figure('position', [10 10 240*Nbumps 200]);
+for i = 1:Nbumps
+    subplot(1,Nbumps,i)
+    topoplot(topo(i,:), chanlocs, 'maplimits', [-12 12],'style', 'map', 'electrodes','off', 'shading', 'interp','whitebk','on');
+    
+    if(i == Nbumps)
+        cbar;
+    end
+end
+
+set(gcf,'Color',[1 1 1]);
+set(gcf, 'PaperPositionMode', 'auto');
+print('-dpng', strcat(analysis_path, plot_path, 'topo_map_',map_index,'_bumps_', num2str(Nbumps),comp_add,'.png'));
+close
+
 %Write trial-level results
 
 %calc durations based on event probs
@@ -1488,5 +1510,5 @@ for b = 2:(Nbumps+1)
 end
 
 % export durations and onset for trial-level analysis
-trial_dur_exp = table(durations,onsets,subjects_var,trials_var,rts_var,blocks_var);
+trial_dur_exp = table(durations,onsets,subjects_var,trials_var,rts_var,blocks_var,conditions,stims_var);
 writetable(trial_dur_exp,strcat(analysis_path,'results/trial_dat_hsmm_final',comp_add,'.csv'));
