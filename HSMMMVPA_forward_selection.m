@@ -29,6 +29,14 @@ end
 % Specify data to load
 comp_add = '_excl_6_15_bs_100_';
 
+% EEGlab is required to plot the recovered stage topologies
+% can be downloaded at: https://eeglab.org/others/How_to_download_EEGLAB.html
+if ~contains(path,'eeglab') % Might require re-naming
+  addpath('eeglab');
+end
+
+eeglab;
+
 %% PCA CHECK
 
 % load data
