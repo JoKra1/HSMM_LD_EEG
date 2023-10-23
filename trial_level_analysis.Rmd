@@ -295,8 +295,6 @@ for (mi in 1:length(models)) {
 }
 
 # Analysis
-# P-values might slightly differ from those reported in the manuscript since
-# the trial-level stage estimation is not deterministic.
 par(mfrow=c(2,3))
 for (mi in 1:length(models)) {
   m <- models[[mi]]

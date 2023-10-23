@@ -1,5 +1,4 @@
 % Estimate HSMMs for Lexical Decision
-
 clear
 clc
 close all
@@ -38,7 +37,7 @@ end
 eeglab;
 
 %% PCA CHECK
-
+close all
 % load data
 load([saveTo strcat('data4HMM_baseline_LD',comp_add,'.mat')]);
 
@@ -53,8 +52,13 @@ saveas(gcf,strcat(analysis_path,plot_path,'pca_var.png'))
 close
 % with 10 there is >= 90% variance explained
 
-%% All condition in a single model
+%% Find initial parameters for each fold
 mkdir([analysis_path strcat('results/models/')]);
+mkdir([analysis_path strcat('results/init_params/')]);
+res_path = strcat('results/init_params/LD_baseline_all_sols_singleModel/');
+
+% res_path holds initial parameters for every fold.
+mkdir([analysis_path res_path]);
 
 pcs = 10; %number of PCs to use.
 c=0; %no correlation constraints
@@ -71,62 +75,50 @@ max_dur = max(trial_lens);
 mean_dur = mean(trial_lens);
 min_dur = min(trial_lens);
 max_bumps = floor(min_dur / 5);
+disp(min_dur)
+disp(max_bumps)
 
-%initialize gamma params
+% Collect starting parameters for every fold
+optimal_bumps = {nsubs,max_bumps};
+optimal_gammas = {nsubs,max_bumps};
+
+%initialize gamma params (equally spaced bumps on every trial)
 for Nbump = 1:max_bumps
     params8{Nbump} = repmat([2 ceil(max_dur)/(Nbump+1)/2], Nbump+1,1); %set initial gamma params to max RT / nr of stages
 end
 
 %fit models from max bumps to 1 bump, to find best initial params for
-%LOOCV
-[lkhs, mags, params, lkhsb, magsb,...
+%LOOCV for every fold separately
+
+parfor subj = 1:nsubs
+    %select data rest - i.e., without subj
+    score_rest = score(subjects_varS ~= subj,:);
+
+    %x/y rest
+    trial_lens_rest = trial_lens(subjects_var ~= subj); 
+    x_rest = [0; cumsum(trial_lens_rest)] + 1;
+    x_rest(end) = [];
+    y_rest = x_rest + trial_lens_rest - 1;
+
+    % Back-fit model
+    [lkhs, mags, params, lkhsb, magsb,...
     paramsb, lkhsI, magsI, paramsI, lkhsU, magsU,...
-    paramsU, Is] = fitBumpsIU_m(score, x, y, params8, max_bumps);
+    paramsU, Is] = fitBumpsIU_m(score_rest, x_rest, y_rest, params8, max_bumps);
 
-
-%save results
-save(strcat(analysis_path, 'results/models/LD_baseline_all_sols_singleModel',comp_add,'.mat'),'lkhs','mags','params','lkhsb','magsb','paramsb','lkhsI','magsI',...
-    'paramsI','lkhsU','magsU','paramsU','Is');
-
-% store best bumps & gamma - used as initial params for all subsequent
-% models
-mkdir([analysis_path strcat('results/init_params/')]);
-
-res_path = strcat('results/init_params/LD_baseline_all_sols_singleModel/');
-mkdir([analysis_path res_path]);
-
-%rebuild x/y
-trial_lens = y-x+1; %calc lengths
-
-max_dur = max(trial_lens); % duration of each trial
-min_dur = min(trial_lens);
-max_bumps = floor(min_dur / 5);
-disp(min_dur)
-disp(max_bumps)
-
-optimal_bumps = {};
-optimal_gammas = {};
-
-%load results
-load(strcat(analysis_path, 'results/models/LD_baseline_all_sols_singleModel',comp_add,'.mat'))
-
-
-%for each solution...
-for Nbumps = 1:max_bumps
-
-    disp(['Nbumps ', num2str(Nbumps)])
-
-    %get best params
-    best_bumps = magsb{Nbumps};
-    best_gammas = paramsb{Nbumps};
-
-    optimal_bumps{Nbumps} = best_bumps;
-    optimal_gammas{Nbumps} = best_gammas;
+    %for each solution...
+    for Nbumps = 1:max_bumps
+    
+        %get best params
+        best_bumps = magsb{Nbumps};
+        best_gammas = paramsb{Nbumps};
+    
+        optimal_bumps{subj,Nbumps} = best_bumps;
+        optimal_gammas{subj,Nbumps} = best_gammas;
+    end
 end
+
+% Save init parameters for all folds
 save(strcat(analysis_path, res_path, 'optimal_sols_baseline_singleModel',comp_add,'.mat'), 'optimal_bumps', 'optimal_gammas');
-
-
-close all
 
 delete(gcp('nocreate'))
 
@@ -161,7 +153,7 @@ for Nbumps = 1:max_bumps
 
     parfor subj = 1:nsubs
 
-        %select data one
+        %select data one (the data from the left-out subject)
         score_one = score(subjects_varS == subj,:);
 
         %x/y one
@@ -170,21 +162,12 @@ for Nbumps = 1:max_bumps
         x_one(end) = [];
         y_one = x_one + trial_lens_one - 1;
 
+        % Take the fold-specific back-fitting estimates, no need
+        % to fit the models again here.
+        bumps(:,:,subj) = optimal_bumps{subj,Nbumps};
+        gammas(:,:,subj) = optimal_gammas{subj,Nbumps};
 
-        %select data rest
-        score_rest = score(subjects_varS ~= subj,:);
-
-        %x/y rest
-        trial_lens_rest = trial_lens(subjects_var ~= subj); 
-        x_rest = [0; cumsum(trial_lens_rest)] + 1;
-        x_rest(end) = [];
-        y_rest = x_rest + trial_lens_rest - 1;
-
-
-        %calculate model based on other subjects
-        [~, bumps(:,:,subj), gammas(:,:,subj),~]=hsmmBoundCorrsVary(score_rest, optimal_bumps{Nbumps},optimal_gammas{Nbumps},1,x_rest,y_rest,max_dur,c);
-
-        % fit the model on the left out subject
+        % evaluate the model on the left out subject
         [likelihoods(subj), ~, ~, ~] = hsmmBoundCorrsVary(score_one,bumps(:,:,subj), gammas(:,:,subj),0,x_one,y_one,max_dur,c);
     end
 
@@ -388,14 +371,14 @@ for map_i = 1:length(maps)
     bumps = zeros(pcs,size(cur_map,2)-1,nsubs); %BestBumpMag
     gammas = zeros(size(cur_map,2), 2, size(cur_map,1), nsubs); %BestGamma
     
-    new_bumps = optimal_bumps{Nbumps};
-    
-    new_gammas = optimal_gammas{Nbumps};
-    
-    
     parpool(5)
     
     parfor subj = 1:nsubs
+        
+        % Select starting parameters for this fold.
+        new_bumps = optimal_bumps{subj,Nbumps};
+    
+        new_gammas = optimal_gammas{subj,Nbumps};
     
         %select data one
         score_one = score(subjects_varS == subj,:);
@@ -517,57 +500,56 @@ for map_i = 1:length(maps)
     bumps = zeros(pcs,size(cur_map,2)-1,nsubs); %BestBumpMag
     gammas = zeros(size(cur_map,2), 2, size(cur_map,1), nsubs); %BestGamma
     
-    new_bumps = optimal_bumps{Nbumps};
-    
-    new_gammas = optimal_gammas{Nbumps};
-
-    colsums = sum(cur_map,1);
-    if ismember(1,colsums)
-        have_bump = [];
-        ci = 1;
-        col = 1;
-        % Identify which stages have a different bump per word type
-        while ci < length(colsums)
-            if colsums(ci) == 1
-                have_bump(end+1) = col;
-                ci = ci + (ncond -1);
-            end
-            col = col + 1;
-            ci = ci + 1;
-        end
-        
-        % Now add for each word type and identified stage extra bump and
-        % gamma parameters.
-        if ~ismember(1,have_bump)
-            tmp_bumps = new_bumps(:,1);
-            tmp_gammas = new_gammas(1,:);
-        else
-            tmp_bumps = repmat(new_bumps(:,1),1,ncond);
-            tmp_gammas = repmat(new_gammas(1,:),ncond,1);
-        end
-        
-        for stage_i = 2:(Nbumps+1)
-            
-            if ~ismember(stage_i,have_bump)
-                if stage_i <= Nbumps % One bump less than number of stages!
-                    tmp_bumps = horzcat(tmp_bumps,new_bumps(:,stage_i));
-                end
-                tmp_gammas = vertcat(tmp_gammas,new_gammas(stage_i,:));
-            else
-                if stage_i <= Nbumps
-                    tmp_bumps = horzcat(tmp_bumps,repmat(new_bumps(:,stage_i),1,ncond));
-                end
-                tmp_gammas = vertcat(tmp_gammas,repmat(new_gammas(stage_i,:),ncond,1));
-            end
-        end
-        new_bumps = tmp_bumps
-        new_gammas = tmp_gammas
-    end
-    
-    
     parpool(5)
     
     parfor subj = 1:nsubs
+        
+        % Select starting parameters for this fold
+        new_bumps = optimal_bumps{subj,Nbumps};
+        new_gammas = optimal_gammas{subj,Nbumps};
+    
+        colsums = sum(cur_map,1);
+        if ismember(1,colsums)
+            have_bump = [];
+            ci = 1;
+            col = 1;
+            % Identify which stages have a different bump per word type
+            while ci < length(colsums)
+                if colsums(ci) == 1
+                    have_bump(end+1) = col;
+                    ci = ci + (ncond -1);
+                end
+                col = col + 1;
+                ci = ci + 1;
+            end
+            
+            % Now add for each word type and identified stage extra bump and
+            % gamma parameters.
+            if ~ismember(1,have_bump)
+                tmp_bumps = new_bumps(:,1);
+                tmp_gammas = new_gammas(1,:);
+            else
+                tmp_bumps = repmat(new_bumps(:,1),1,ncond);
+                tmp_gammas = repmat(new_gammas(1,:),ncond,1);
+            end
+            
+            for stage_i = 2:(Nbumps+1)
+                
+                if ~ismember(stage_i,have_bump)
+                    if stage_i <= Nbumps % One bump less than number of stages!
+                        tmp_bumps = horzcat(tmp_bumps,new_bumps(:,stage_i));
+                    end
+                    tmp_gammas = vertcat(tmp_gammas,new_gammas(stage_i,:));
+                else
+                    if stage_i <= Nbumps
+                        tmp_bumps = horzcat(tmp_bumps,repmat(new_bumps(:,stage_i),1,ncond));
+                    end
+                    tmp_gammas = vertcat(tmp_gammas,repmat(new_gammas(stage_i,:),ncond,1));
+                end
+            end
+            new_bumps = tmp_bumps
+            new_gammas = tmp_gammas
+        end
     
         %select data one
         score_one = score(subjects_varS == subj,:);
@@ -688,58 +670,57 @@ for map_i = 1:length(maps)
     likelihoods = repmat(-Inf,nsubs,1); %BestLikelihood
     bumps = zeros(pcs,size(cur_map,2)-1,nsubs); %BestBumpMag
     gammas = zeros(size(cur_map,2), 2, size(cur_map,1), nsubs); %BestGamma
-    
-    new_bumps = optimal_bumps{Nbumps};
-    
-    new_gammas = optimal_gammas{Nbumps};
 
-    colsums = sum(cur_map,1);
-    if ismember(1,colsums)
-        have_bump = [];
-        ci = 1;
-        col = 1;
-        % Identify which stages have a different bump per word type
-        while ci < length(colsums)
-            if colsums(ci) == 1
-                have_bump(end+1) = col;
-                ci = ci + (ncond -1);
-            end
-            col = col + 1;
-            ci = ci + 1;
-        end
-        
-        % Now add for each word type and identified stage extra bump and
-        % gamma parameters.
-        if ~ismember(1,have_bump)
-            tmp_bumps = new_bumps(:,1);
-            tmp_gammas = new_gammas(1,:);
-        else
-            tmp_bumps = repmat(new_bumps(:,1),1,ncond);
-            tmp_gammas = repmat(new_gammas(1,:),ncond,1);
-        end
-        
-        for stage_i = 2:(Nbumps+1)
-            
-            if ~ismember(stage_i,have_bump)
-                if stage_i <= Nbumps % One bump less than number of stages!
-                    tmp_bumps = horzcat(tmp_bumps,new_bumps(:,stage_i));
-                end
-                tmp_gammas = vertcat(tmp_gammas,new_gammas(stage_i,:));
-            else
-                if stage_i <= Nbumps
-                    tmp_bumps = horzcat(tmp_bumps,repmat(new_bumps(:,stage_i),1,ncond));
-                end
-                tmp_gammas = vertcat(tmp_gammas,repmat(new_gammas(stage_i,:),ncond,1));
-            end
-        end
-        new_bumps = tmp_bumps
-        new_gammas = tmp_gammas
-    end
-    
-    
     parpool(5)
     
     parfor subj = 1:nsubs
+
+        % Select starting parameters for this fold
+        new_bumps = optimal_bumps{subj,Nbumps};
+        new_gammas = optimal_gammas{subj,Nbumps};
+    
+        colsums = sum(cur_map,1);
+        if ismember(1,colsums)
+            have_bump = [];
+            ci = 1;
+            col = 1;
+            % Identify which stages have a different bump per word type
+            while ci < length(colsums)
+                if colsums(ci) == 1
+                    have_bump(end+1) = col;
+                    ci = ci + (ncond -1);
+                end
+                col = col + 1;
+                ci = ci + 1;
+            end
+            
+            % Now add for each word type and identified stage extra bump and
+            % gamma parameters.
+            if ~ismember(1,have_bump)
+                tmp_bumps = new_bumps(:,1);
+                tmp_gammas = new_gammas(1,:);
+            else
+                tmp_bumps = repmat(new_bumps(:,1),1,ncond);
+                tmp_gammas = repmat(new_gammas(1,:),ncond,1);
+            end
+            
+            for stage_i = 2:(Nbumps+1)
+                
+                if ~ismember(stage_i,have_bump)
+                    if stage_i <= Nbumps % One bump less than number of stages!
+                        tmp_bumps = horzcat(tmp_bumps,new_bumps(:,stage_i));
+                    end
+                    tmp_gammas = vertcat(tmp_gammas,new_gammas(stage_i,:));
+                else
+                    if stage_i <= Nbumps
+                        tmp_bumps = horzcat(tmp_bumps,repmat(new_bumps(:,stage_i),1,ncond));
+                    end
+                    tmp_gammas = vertcat(tmp_gammas,repmat(new_gammas(stage_i,:),ncond,1));
+                end
+            end
+            new_bumps = tmp_bumps
+            new_gammas = tmp_gammas
+        end
     
         %select data one
         score_one = score(subjects_varS == subj,:);
@@ -856,57 +837,56 @@ for map_i = 1:length(maps)
     bumps = zeros(pcs,size(cur_map,2)-1,nsubs); %BestBumpMag
     gammas = zeros(size(cur_map,2), 2, size(cur_map,1), nsubs); %BestGamma
     
-    new_bumps = optimal_bumps{Nbumps};
-    
-    new_gammas = optimal_gammas{Nbumps};
-
-    colsums = sum(cur_map,1);
-    if ismember(1,colsums)
-        have_bump = [];
-        ci = 1;
-        col = 1;
-        % Identify which stages have a different bump per word type
-        while ci < length(colsums)
-            if colsums(ci) == 1
-                have_bump(end+1) = col;
-                ci = ci + (ncond -1);
-            end
-            col = col + 1;
-            ci = ci + 1;
-        end
-        
-        % Now add for each word type and identified stage extra bump and
-        % gamma parameters.
-        if ~ismember(1,have_bump)
-            tmp_bumps = new_bumps(:,1);
-            tmp_gammas = new_gammas(1,:);
-        else
-            tmp_bumps = repmat(new_bumps(:,1),1,ncond);
-            tmp_gammas = repmat(new_gammas(1,:),ncond,1);
-        end
-        
-        for stage_i = 2:(Nbumps+1)
-            
-            if ~ismember(stage_i,have_bump)
-                if stage_i <= Nbumps % One bump less than number of stages!
-                    tmp_bumps = horzcat(tmp_bumps,new_bumps(:,stage_i));
-                end
-                tmp_gammas = vertcat(tmp_gammas,new_gammas(stage_i,:));
-            else
-                if stage_i <= Nbumps
-                    tmp_bumps = horzcat(tmp_bumps,repmat(new_bumps(:,stage_i),1,ncond));
-                end
-                tmp_gammas = vertcat(tmp_gammas,repmat(new_gammas(stage_i,:),ncond,1));
-            end
-        end
-        new_bumps = tmp_bumps
-        new_gammas = tmp_gammas
-    end
-    
-    
     parpool(5)
     
     parfor subj = 1:nsubs
+
+        % Select starting parameters for this fold
+        new_bumps = optimal_bumps{subj,Nbumps};
+        new_gammas = optimal_gammas{subj,Nbumps};
+    
+        colsums = sum(cur_map,1);
+        if ismember(1,colsums)
+            have_bump = [];
+            ci = 1;
+            col = 1;
+            % Identify which stages have a different bump per word type
+            while ci < length(colsums)
+                if colsums(ci) == 1
+                    have_bump(end+1) = col;
+                    ci = ci + (ncond -1);
+                end
+                col = col + 1;
+                ci = ci + 1;
+            end
+            
+            % Now add for each word type and identified stage extra bump and
+            % gamma parameters.
+            if ~ismember(1,have_bump)
+                tmp_bumps = new_bumps(:,1);
+                tmp_gammas = new_gammas(1,:);
+            else
+                tmp_bumps = repmat(new_bumps(:,1),1,ncond);
+                tmp_gammas = repmat(new_gammas(1,:),ncond,1);
+            end
+            
+            for stage_i = 2:(Nbumps+1)
+                
+                if ~ismember(stage_i,have_bump)
+                    if stage_i <= Nbumps % One bump less than number of stages!
+                        tmp_bumps = horzcat(tmp_bumps,new_bumps(:,stage_i));
+                    end
+                    tmp_gammas = vertcat(tmp_gammas,new_gammas(stage_i,:));
+                else
+                    if stage_i <= Nbumps
+                        tmp_bumps = horzcat(tmp_bumps,repmat(new_bumps(:,stage_i),1,ncond));
+                    end
+                    tmp_gammas = vertcat(tmp_gammas,repmat(new_gammas(stage_i,:),ncond,1));
+                end
+            end
+            new_bumps = tmp_bumps
+            new_gammas = tmp_gammas
+        end
     
         %select data one
         score_one = score(subjects_varS == subj,:);
@@ -1014,382 +994,57 @@ for map_i = 1:length(maps)
     likelihoods = repmat(-Inf,nsubs,1); %BestLikelihood
     bumps = zeros(pcs,size(cur_map,2)-1,nsubs); %BestBumpMag
     gammas = zeros(size(cur_map,2), 2, size(cur_map,1), nsubs); %BestGamma
-    
-    new_bumps = optimal_bumps{Nbumps};
-    
-    new_gammas = optimal_gammas{Nbumps};
 
-    colsums = sum(cur_map,1);
-    if ismember(1,colsums)
-        have_bump = [];
-        ci = 1;
-        col = 1;
-        % Identify which stages have a different bump per word type
-        while ci < length(colsums)
-            if colsums(ci) == 1
-                have_bump(end+1) = col;
-                ci = ci + (ncond -1);
-            end
-            col = col + 1;
-            ci = ci + 1;
-        end
-        
-        % Now add for each word type and identified stage extra bump and
-        % gamma parameters.
-        if ~ismember(1,have_bump)
-            tmp_bumps = new_bumps(:,1);
-            tmp_gammas = new_gammas(1,:);
-        else
-            tmp_bumps = repmat(new_bumps(:,1),1,ncond);
-            tmp_gammas = repmat(new_gammas(1,:),ncond,1);
-        end
-        
-        for stage_i = 2:(Nbumps+1)
-            
-            if ~ismember(stage_i,have_bump)
-                if stage_i <= Nbumps % One bump less than number of stages!
-                    tmp_bumps = horzcat(tmp_bumps,new_bumps(:,stage_i));
-                end
-                tmp_gammas = vertcat(tmp_gammas,new_gammas(stage_i,:));
-            else
-                if stage_i <= Nbumps
-                    tmp_bumps = horzcat(tmp_bumps,repmat(new_bumps(:,stage_i),1,ncond));
-                end
-                tmp_gammas = vertcat(tmp_gammas,repmat(new_gammas(stage_i,:),ncond,1));
-            end
-        end
-        new_bumps = tmp_bumps
-        new_gammas = tmp_gammas
-    end
-    
-    
     parpool(5)
     
     parfor subj = 1:nsubs
+
+        % Select starting parameters for this fold
+        new_bumps = optimal_bumps{subj,Nbumps};
+        new_gammas = optimal_gammas{subj,Nbumps};
     
-        %select data one
-        score_one = score(subjects_varS == subj,:);
-    
-        %x/y one
-        trial_lens_one = trial_lens(subjects_var == subj);
-        x_one = [0; cumsum(trial_lens_one)] + 1;
-        x_one(end) = [];
-        y_one = x_one + trial_lens_one - 1;
-        conds_one = conditions(subjects_var == subj);
-        
-    
-        %select data rest
-        score_rest = score(subjects_varS ~= subj,:);
-    
-        %x/y rest
-        trial_lens_rest = trial_lens(subjects_var ~= subj); 
-        x_rest = [0; cumsum(trial_lens_rest)] + 1;
-        x_rest(end) = [];
-        y_rest = x_rest + trial_lens_rest - 1;
-        conds_rest = conditions(subjects_var ~= subj);
-    
-        %calculate model based on other subjects
-        [~, bumps(:,:,subj), gammas(:,:,:,subj),~]=hsmmBoundCorrsCondsVary(score_rest, conds_rest, ...
-                new_bumps,new_gammas, ...
-                1,x_rest,y_rest,max_dur,cur_map,c);
-            
-    
-        % fit the model on the left out subject
-        [likelihoods(subj), ~, ~, ~] = hsmmBoundCorrsCondsVary(score_one,conds_one, bumps(:,:,subj), gammas(:,:,:,subj),0,x_one,y_one,max_dur, cur_map, c);
-    end
-    
-    % calc final solution based on average
-    % subject
-    [~,bumps_final,gammas_final, events_final]= hsmmBoundCorrsCondsVary(score,conditions,nanmean(bumps,3),nanmean(gammas,4),1,x,y,max_dur,cur_map,c);
-    
-    % save to
-    save(strcat(analysis_path, 'results/models/loocv_baseline_map_',map_index,'_bumps', num2str(Nbumps),comp_add,'.mat'),...
-    'likelihoods', 'bumps', 'gammas', 'bumps_final', 'gammas_final','events_final');
-    
-    % Check improvement according to current candidate
-    improv = sum(likelihoods > likelis_best)
-    [p, h] = signtest(likelihoods,likelis_best,'Tail','right')
-    
-    delete(gcp('nocreate'))
-
-
-end
-
-%% Sixth forward pass
-% Strong evidence for bump preceding fourth stage (and third Gamma) to
-% differ between word types. Hence we again check for additional Gammas
-% + bumps given new best model.
-
-
-map_I = [1 1 1 0 0 1 0 0 1 1;...
-         2 1 0 1 0 0 1 0 2 1;...
-         3 1 0 0 1 0 0 1 3 1];
-
-map_II = [1 1 1 0 0 1 0 0 1 1;...
-          1 2 0 1 0 0 1 0 2 1;...
-          1 3 0 0 1 0 0 1 3 1];
-
-map_III = [1 1 1 0 0 1 0 0 1 0 0 1;...
-           1 1 0 1 0 0 1 0 0 1 0 1;...
-           1 1 0 0 1 0 0 1 0 0 1 1];
-
-map_IV = [1 1 1 0 0 1 0 0 1 1;...
-          1 1 0 1 0 0 1 0 2 2;...
-          1 1 0 0 1 0 0 1 3 3];
-
-
-maps = {map_I,map_II,map_III,map_IV};
-   map_indices = ["Ie","IIe","IIIe","IVe"];
-
-
-% re-load data
-load([saveTo strcat('data4HMM_baseline_LD',comp_add,'.mat')]);
-
-%load optimal solutions from fitbumps overall model
-res_path = strcat('results/init_params/LD_baseline_all_sols_singleModel/');
-load(strcat(analysis_path, res_path, 'optimal_sols_baseline_singleModel',comp_add,'.mat'));
-
-%select data
-pcs=10;
-c=0;
-score = normedscore10(:,1:pcs);
-
-%rebuild x/y
-trial_lens = y-x+1; %calc lengths //dur
-
-max_dur = max(trial_lens);
-min_dur = min(trial_lens);
-max_bumps = floor(min_dur / 5);
-
-% Number of word types
-ncond = 3;
-
-% Get likelihood from current best model:
-loocv_best = load(strcat(analysis_path, 'results/models/loocv_baseline_map_IIId_bumps5',comp_add,'.mat'));
-
-
-likelis_best = loocv_best.likelihoods;
-
-for map_i = 1:length(maps)
-    map_index = map_indices(map_i)
-    cur_map = maps{map_i};
-
-    %specify nr of bumps
-    Nbumps = sum(cur_map(1,:))-1;
-    
-    disp(['Map - Nbumps ', num2str(Nbumps)])
-    
-    likelihoods = repmat(-Inf,nsubs,1); %BestLikelihood
-    bumps = zeros(pcs,size(cur_map,2)-1,nsubs); %BestBumpMag
-    gammas = zeros(size(cur_map,2), 2, size(cur_map,1), nsubs); %BestGamma
-    
-    new_bumps = optimal_bumps{Nbumps};
-    
-    new_gammas = optimal_gammas{Nbumps};
-
-    colsums = sum(cur_map,1);
-    if ismember(1,colsums)
-        have_bump = [];
-        ci = 1;
-        col = 1;
-        % Identify which stages have a different bump per word type
-        while ci < length(colsums)
-            if colsums(ci) == 1
-                have_bump(end+1) = col;
-                ci = ci + (ncond -1);
-            end
-            col = col + 1;
-            ci = ci + 1;
-        end
-        
-        % Now add for each word type and identified stage extra bump and
-        % gamma parameters.
-        if ~ismember(1,have_bump)
-            tmp_bumps = new_bumps(:,1);
-            tmp_gammas = new_gammas(1,:);
-        else
-            tmp_bumps = repmat(new_bumps(:,1),1,ncond);
-            tmp_gammas = repmat(new_gammas(1,:),ncond,1);
-        end
-        
-        for stage_i = 2:(Nbumps+1)
-            
-            if ~ismember(stage_i,have_bump)
-                if stage_i <= Nbumps % One bump less than number of stages!
-                    tmp_bumps = horzcat(tmp_bumps,new_bumps(:,stage_i));
+        colsums = sum(cur_map,1);
+        if ismember(1,colsums)
+            have_bump = [];
+            ci = 1;
+            col = 1;
+            % Identify which stages have a different bump per word type
+            while ci < length(colsums)
+                if colsums(ci) == 1
+                    have_bump(end+1) = col;
+                    ci = ci + (ncond -1);
                 end
-                tmp_gammas = vertcat(tmp_gammas,new_gammas(stage_i,:));
+                col = col + 1;
+                ci = ci + 1;
+            end
+            
+            % Now add for each word type and identified stage extra bump and
+            % gamma parameters.
+            if ~ismember(1,have_bump)
+                tmp_bumps = new_bumps(:,1);
+                tmp_gammas = new_gammas(1,:);
             else
-                if stage_i <= Nbumps
-                    tmp_bumps = horzcat(tmp_bumps,repmat(new_bumps(:,stage_i),1,ncond));
-                end
-                tmp_gammas = vertcat(tmp_gammas,repmat(new_gammas(stage_i,:),ncond,1));
+                tmp_bumps = repmat(new_bumps(:,1),1,ncond);
+                tmp_gammas = repmat(new_gammas(1,:),ncond,1);
             end
-        end
-        new_bumps = tmp_bumps
-        new_gammas = tmp_gammas
-    end
-    
-    
-    parpool(5)
-    
-    parfor subj = 1:nsubs
-    
-        %select data one
-        score_one = score(subjects_varS == subj,:);
-    
-        %x/y one
-        trial_lens_one = trial_lens(subjects_var == subj);
-        x_one = [0; cumsum(trial_lens_one)] + 1;
-        x_one(end) = [];
-        y_one = x_one + trial_lens_one - 1;
-        conds_one = conditions(subjects_var == subj);
-        
-    
-        %select data rest
-        score_rest = score(subjects_varS ~= subj,:);
-    
-        %x/y rest
-        trial_lens_rest = trial_lens(subjects_var ~= subj); 
-        x_rest = [0; cumsum(trial_lens_rest)] + 1;
-        x_rest(end) = [];
-        y_rest = x_rest + trial_lens_rest - 1;
-        conds_rest = conditions(subjects_var ~= subj);
-    
-        %calculate model based on other subjects
-        [~, bumps(:,:,subj), gammas(:,:,:,subj),~]=hsmmBoundCorrsCondsVary(score_rest, conds_rest, ...
-                new_bumps,new_gammas, ...
-                1,x_rest,y_rest,max_dur,cur_map,c);
             
-    
-        % fit the model on the left out subject
-        [likelihoods(subj), ~, ~, ~] = hsmmBoundCorrsCondsVary(score_one,conds_one, bumps(:,:,subj), gammas(:,:,:,subj),0,x_one,y_one,max_dur, cur_map, c);
-    end
-    
-    % calc final solution based on average
-    % subject
-    [~,bumps_final,gammas_final, events_final]= hsmmBoundCorrsCondsVary(score,conditions,nanmean(bumps,3),nanmean(gammas,4),1,x,y,max_dur,cur_map,c);
-    
-    % save to
-    save(strcat(analysis_path, 'results/models/loocv_baseline_map_',map_index,'_bumps', num2str(Nbumps),comp_add,'.mat'),...
-    'likelihoods', 'bumps', 'gammas', 'bumps_final', 'gammas_final','events_final');
-    
-    % Check improvement according to current candidate
-    improv = sum(likelihoods > likelis_best)
-    [p, h] = signtest(likelihoods,likelis_best,'Tail','right')
-    
-    delete(gcp('nocreate'))
-
-
-end
-
-%% Seventh forward pass
-% No evidence for additional Gammas, so check Bump + Gammas again for those
-% stages for which only the Gammas varied in the last step.
-
-map_I = [1 0 0 1 1 0 0 1 0 0 1 1;...
-         0 1 0 1 0 1 0 0 1 0 2 1;...
-         0 0 1 1 0 0 1 0 0 1 3 1];
-
-map_II = [1 1 0 0 1 0 0 1 0 0 1 1;...
-          1 0 1 0 0 1 0 0 1 0 2 1;...
-          1 0 0 1 0 0 1 0 0 1 3 1];
-
-maps = {map_I,map_II};
-map_indices = ["If","IIf"];
-
-% re-load data
-load([saveTo strcat('data4HMM_baseline_LD',comp_add,'.mat')]);
-
-%load optimal solutions from fitbumps overall model
-res_path = strcat('results/init_params/LD_baseline_all_sols_singleModel/');
-load(strcat(analysis_path, res_path, 'optimal_sols_baseline_singleModel',comp_add,'.mat'));
-
-%select data
-pcs=10;
-c=0;
-score = normedscore10(:,1:pcs);
-
-%rebuild x/y
-trial_lens = y-x+1; %calc lengths //dur
-
-max_dur = max(trial_lens);
-min_dur = min(trial_lens);
-max_bumps = floor(min_dur / 5);
-
-% Number of word types
-ncond = 3;
-
-% Get likelihood from current best model:
-loocv_best = load(strcat(analysis_path, 'results/models/loocv_baseline_map_IIId_bumps5',comp_add,'.mat'));
-
-
-likelis_best = loocv_best.likelihoods;
-
-for map_i = 1:length(maps)
-    map_index = map_indices(map_i)
-    cur_map = maps{map_i};
-
-    %specify nr of bumps
-    Nbumps = sum(cur_map(1,:))-1;
-    
-    disp(['Map - Nbumps ', num2str(Nbumps)])
-    
-    likelihoods = repmat(-Inf,nsubs,1); %BestLikelihood
-    bumps = zeros(pcs,size(cur_map,2)-1,nsubs); %BestBumpMag
-    gammas = zeros(size(cur_map,2), 2, size(cur_map,1), nsubs); %BestGamma
-    
-    new_bumps = optimal_bumps{Nbumps};
-    
-    new_gammas = optimal_gammas{Nbumps};
-
-    colsums = sum(cur_map,1);
-    if ismember(1,colsums)
-        have_bump = [];
-        ci = 1;
-        col = 1;
-        % Identify which stages have a different bump per word type
-        while ci < length(colsums)
-            if colsums(ci) == 1
-                have_bump(end+1) = col;
-                ci = ci + (ncond -1);
-            end
-            col = col + 1;
-            ci = ci + 1;
-        end
-        
-        % Now add for each word type and identified stage extra bump and
-        % gamma parameters.
-        if ~ismember(1,have_bump)
-            tmp_bumps = new_bumps(:,1);
-            tmp_gammas = new_gammas(1,:);
-        else
-            tmp_bumps = repmat(new_bumps(:,1),1,ncond);
-            tmp_gammas = repmat(new_gammas(1,:),ncond,1);
-        end
-        
-        for stage_i = 2:(Nbumps+1)
-            
-            if ~ismember(stage_i,have_bump)
-                if stage_i <= Nbumps % One bump less than number of stages!
-                    tmp_bumps = horzcat(tmp_bumps,new_bumps(:,stage_i));
+            for stage_i = 2:(Nbumps+1)
+                
+                if ~ismember(stage_i,have_bump)
+                    if stage_i <= Nbumps % One bump less than number of stages!
+                        tmp_bumps = horzcat(tmp_bumps,new_bumps(:,stage_i));
+                    end
+                    tmp_gammas = vertcat(tmp_gammas,new_gammas(stage_i,:));
+                else
+                    if stage_i <= Nbumps
+                        tmp_bumps = horzcat(tmp_bumps,repmat(new_bumps(:,stage_i),1,ncond));
+                    end
+                    tmp_gammas = vertcat(tmp_gammas,repmat(new_gammas(stage_i,:),ncond,1));
                 end
-                tmp_gammas = vertcat(tmp_gammas,new_gammas(stage_i,:));
-            else
-                if stage_i <= Nbumps
-                    tmp_bumps = horzcat(tmp_bumps,repmat(new_bumps(:,stage_i),1,ncond));
-                end
-                tmp_gammas = vertcat(tmp_gammas,repmat(new_gammas(stage_i,:),ncond,1));
             end
+            new_bumps = tmp_bumps
+            new_gammas = tmp_gammas
         end
-        new_bumps = tmp_bumps
-        new_gammas = tmp_gammas
-    end
-    
-    
-    parpool(5)
-    
-    parfor subj = 1:nsubs
     
         %select data one
         score_one = score(subjects_varS == subj,:);
@@ -1445,7 +1100,7 @@ end
 load([saveTo strcat('data4HMM_baseline_LD',comp_add,'.mat')]);
 
 % Select final map
-map_index = "IIId";
+map_index = "IVb";
 
 pcs=10;
 c=0;
