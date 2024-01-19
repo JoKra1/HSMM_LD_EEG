@@ -13,7 +13,8 @@ library(mgcv)
 library(itsadug)
 library(RColorBrewer)
 library(R.matlab)
-
+library(vwr)
+library(corrplot)
 # Color for conditions
 words_col <- brewer.pal(12, 'Paired')[6]
 non_word_col <- c('#17bce5',brewer.pal(12, 'Paired')[2])
@@ -28,6 +29,21 @@ colrc <- brewer.pal(6, "Paired")
 hsmm_dat <- read.csv("./results/trial_dat_hsmm_final_excl_6_15_bs_100_.csv")
 stimuli <- read.csv("./data/stimuli.csv",sep=";")
 
+stimuli$logSubtlexW <- NA
+stimuli$logCelexW <- NA
+stimuli$logOLDW <- NA
+stimuli$logOLDPW <- NA
+stimuli$logOLDRS <- NA
+
+# Load in dlp item-level data
+load("./data/dlp-items.Rdata")
+load("./data/dlp-stimuli.Rdata")
+dlp <- merge(dlp.items,dlp.stimuli)
+rm(dlp.items,dlp.stimuli)
+
+# Extract words for easy OLD calculation
+dlp_words <- as.character(droplevels(dlp$spelling[dlp$lexicality == "W"]))
+
 hsmm_dat$subjects_var <- as.factor(hsmm_dat$subjects_var)
 hsmm_dat$blocks_var <- as.factor(hsmm_dat$blocks_var)
 
@@ -39,6 +55,7 @@ hsmm_dat$conditions <- as.factor(hsmm_dat$conditions)
 hsmm_dat$logGoogleFreq <- -1
 hsmm_dat$foreign <- -1
 hsmm_dat$logSubtlex <- -1
+hsmm_dat$logOLD <- -1
 
 for(stim in unique(hsmm_dat$stims_var)){
   stim_cond <- unique(hsmm_dat$conditions[hsmm_dat$stims_var == stim])
@@ -46,49 +63,62 @@ for(stim in unique(hsmm_dat$stims_var)){
   if(stim_cond == "W"){
     hsmm_dat$logGoogleFreq[hsmm_dat$stims_var == stim] <- stimuli$logFreqW[stimuli$word == stim]
     hsmm_dat$foreign[hsmm_dat$stims_var == stim] <- stimuli$foreign[stimuli$word == stim]
+    
     # Subtlex per million, taken from DLP corpus (Keuleers et al., 2010) and log-transformed
-    hsmm_dat$logSubtlex[hsmm_dat$stims_var == stim] <- stimuli$logSubtlexW[stimuli$word == stim]
+    hsmm_dat$logSubtlex[hsmm_dat$stims_var == stim] <- log(dlp$subtlex.frequency.million[dlp$spelling == stim])
+    stimuli$logSubtlexW[stimuli$word == stim] <- log(dlp$subtlex.frequency.million[dlp$spelling == stim])
+    
+    # log(OLD20) for stimulus against all words in the DLP (see Yarkoni et al., 2008; Hendrix & Sun, 2020).
+    stimuli$logOLDW[stimuli$word == stim] <- log(old20(stim,dlp_words))
+    
+    # Celex frequency (Baayen et al., 1993) also taken from DLP.
+    stimuli$logCelexW[stimuli$word == stim] <- log(dlp$celex.frequency[dlp$spelling == stim])
   }
   
   else if(stim_cond == "PW"){
     hsmm_dat$logGoogleFreq[hsmm_dat$stims_var == stim] <- stimuli$logFreqPW[stimuli$pseudo == stim]
+    stimuli$logOLDPW[stimuli$pseudo == stim] <- log(old20(stim,dlp_words))
   }
   
   else if(stim_cond == "RS"){
     hsmm_dat$logGoogleFreq[hsmm_dat$stims_var == stim] <- stimuli$logFreqRS[stimuli$random == stim]
+    stimuli$logOLDRS[stimuli$random == stim] <- log(old20(stim,dlp_words))
   }
   
   else {
     stop("Stim not found")
   }
 }
+stimuli$logCelexW[!is.finite(stimuli$logCelexW)] <- NA
 
-# Collect sample-level data
+# Collect trial-level EEG data as well
 matlab_dat <- readMat("./data/data4HMM_baseline_LD_excl_6_15_bs_100_.mat")
+```
 
-# Data frame contains sample level (S & B variables) information about
-# frequency, subject, and condition for that sample.
-sample_data <- data.frame("subjects_var"=matlab_dat$subjects.varS,
-                          "logGoogleFreq"=log(matlab_dat$freq.varS),
-                          "conditions"=matlab_dat$conditionsB,
-                          "trials_var"=matlab_dat$trials.varS)
+## Correlation matrix Google frequency
+```{r}
+w_pred_dat <- stimuli[stimuli$foreign == 0,colnames(stimuli) %in% c("logFreqW","logSubtlexW","logOLDW","logCelexW")]
+lw_pred_dat <- stimuli[stimuli$foreign == 1,colnames(stimuli) %in% c("logFreqW","logSubtlexW","logOLDW","logCelexW")]
+pw_pred_dat <- stimuli[stimuli$pseudo != "",colnames(stimuli) %in% c("logFreqPW","logSubtlexW","logOLDPW","logCelexW")]
+rs_pred_dat <- stimuli[stimuli$random != "",colnames(stimuli) %in% c("logFreqRS","logSubtlexW","logOLDRS","logCelexW")]
 
-sample_data$conditions[sample_data$conditions == 1] <- "W"
-sample_data$conditions[sample_data$conditions == 2] <- "PW"
-sample_data$conditions[sample_data$conditions == 3] <- "RS"
+colnames(w_pred_dat) <- c("Google","Subtlex","Celex","OLD20")
+colnames(lw_pred_dat) <- c("Google","Subtlex","Celex","OLD20")
+colnames(pw_pred_dat) <- c("Google","Subtlex","Celex","OLD20")
+colnames(rs_pred_dat) <- c("Google","Subtlex","Celex","OLD20")
 
-sample_data$unq_trial <- paste0(sample_data$subjects_var,"_",sample_data$trials_var)
-sample_data$time <- -1
-
-# Re-create sample-level time-variable
-for (utr in unique(sample_data$unq_trial)) {
-  sample_data$time[sample_data$unq_trial == utr] <- ((1:length(sample_data$time[sample_data$unq_trial == utr]))*10)
-}
+cor(w_pred_dat,w_pred_dat,use = "pairwise")
+cor(lw_pred_dat,lw_pred_dat,use = "pairwise")
+cor(pw_pred_dat,pw_pred_dat,use = "pairwise")
+cor(rs_pred_dat,rs_pred_dat,use = "pairwise")
 
 ```
 
 ## Google Frequency Overview
 ```{r}
+par(mfrow=c(1,1))
+
+# Correlation plots
 plot(stimuli$logFreqW,stimuli$logSubtlexW,
      col=words_col,pch=16,
      xlab="Log(Google frequency)",
@@ -99,47 +129,34 @@ points(stimuli$logFreqW[stimuli$foreign == 1],
        stimuli$logSubtlexW[stimuli$foreign == 1],
        col="purple",pch=16)
 
-# Stacked Histogram
-hist(c(stimuli$logFreqW[stimuli$foreign == 1],
-       stimuli$logFreqW[stimuli$foreign == 0],
-       stimuli$logFreqPW,
-       stimuli$logFreqRS),
+plot(stimuli$logFreqPW,stimuli$logSubtlexW,
+     col=non_word_col[2],pch=16,
      xlab="Log(Google frequency)",
-     main="",
-     col="purple",
-     xlim=c(0,25),
-     ylim=c(0,60),
-     breaks=20)
+     ylab="Log(SUBTLEX frequency)")
 
-hist(c(stimuli$logFreqW[stimuli$foreign == 0],
-       stimuli$logFreqPW,
-       stimuli$logFreqRS),
+plot(stimuli$logFreqRS,stimuli$logOLDRS,
+     col=non_word_col[1],pch=16,
      xlab="Log(Google frequency)",
-     main="",
-     col=words_col,
-     xlim=c(0,25),
-     ylim=c(0,60),
-     breaks=20,
-     add=T)
+     ylab="Log(OLD20)")
 
-hist(c(stimuli$logFreqPW,
-       stimuli$logFreqRS),
-     xlab="Log(Google frequency)",
-     main="",
-     col=non_word_col[2],
-     xlim=c(0,25),
-     ylim=c(0,60),
-     breaks=20,
-     add=T)
+# Densities
+emptyPlot(xlim=c(0,25),ylim=c(0,0.2),
+       xlab="Log(Google frequency)",
+       ylab="Density",main="")
 
-hist(c(stimuli$logFreqRS),
-     xlab="Log(Google frequency)",
-     main="",
-     col=non_word_col[1],
-     xlim=c(0,25),
-     ylim=c(0,60),
-     breaks=20,
-     add=T)
+lines(density(stimuli$logFreqW[stimuli$foreign == 1],cut=0),col = alpha("purple",0.6),lwd=2)
+lines(density(stimuli$logFreqW[stimuli$foreign == 0],cut=0),col = alpha(words_col,1),lwd=2)
+lines(density(stimuli$logFreqPW[!is.na(stimuli$logFreqPW)],cut=0),col = alpha(non_word_col[2],1),lwd=2)
+lines(density(stimuli$logFreqRS[!is.na(stimuli$logFreqRS)],cut=0),col = alpha(non_word_col[1],1),lwd=2)
+
+emptyPlot(xlim=c(0,1.5),ylim=c(0,6),
+       xlab="Log(OLD20)",
+       ylab="Density",main="")
+
+lines(density(stimuli$logOLDW[stimuli$foreign == 1],cut=0),col = alpha("purple",0.6),lwd=2)
+lines(density(stimuli$logOLDW[stimuli$foreign == 0],cut=0),col = alpha(words_col,1),lwd=2)
+lines(density(stimuli$logOLDPW[!is.na(stimuli$logOLDPW)],cut=0),col = alpha(non_word_col[2],1),lwd=2)
+lines(density(stimuli$logOLDRS[!is.na(stimuli$logOLDRS)],cut=0),col = alpha(non_word_col[1],1),lwd=2)
 ```
 
 ## Average results
@@ -473,54 +490,81 @@ for (mi in 1:length(models)) {
 ```{r}
 # CH 13 = Pz
 # Ch 16 = Oz
+
+s_rate <- 512
+s_len <- 1000/512
+
 par(mfrow=c(2,3))
 for (ch in c(13,16)) {
   
-  EEG_data <- sample_data
-  EEG_data$EEG <- matlab_dat$data[,ch]
-
-  # Look only at the first 250 ms because of the focus on early effects.
-  EEG_data <- EEG_data[EEG_data$time <= 250,]
+  EEG_data <- matlab_dat$erp.data
+  EEG_data <- EEG_data[ch,,]
   
   conds <- c("W","PW","RS")
   cond_cols <- c(words_col,non_word_col[2],non_word_col[1])
   
-  for (cond_i in 1:3) {
-    cond <- conds[cond_i]
+  for (cond_i in 3:1) {
     cond_col <- cond_cols[cond_i]
+    cond <- conds[cond_i]
     
     # Compute critical values in condition-specific frequency distribution
     # corresponding to 4 quartiles.
     c_quantiles <- quantile(hsmm_dat$logGoogleFreq[hsmm_dat$conditions == cond],
                           probs=seq(0,1,(1/4)))
     
-    # Average EEG signal per time-point over all frequency values in
-    # each quartile bin and plot.
-    emptyPlot(c(0,250),
+    # Early effects are of interest.
+    emptyPlot(c(-100,300),
               c(-3,3),
               bty="n",
               xlab="Time (in ms)",
               ylab="Activation (mV)")
     
-    cond_dat <- EEG_data[EEG_data$conditions == cond,]
+    # Average EEG signal per subject, time-point, and quantile.
+    # Then compute average and standard error per time-point and
+    # quantile and plot.
+    cond_dat <- t(EEG_data[,matlab_dat$conditions == cond_i])
+    cond_freq <- hsmm_dat$logGoogleFreq[matlab_dat$conditions == cond_i]
+    cond_sub <- hsmm_dat$subjects_var[matlab_dat$conditions == cond_i]
     
     for (qi in 2:length(c_quantiles)) {
       
       if(qi == length(c_quantiles)) {
-        qt_dat <- cond_dat[cond_dat$logGoogleFreq <= c_quantiles[qi] &
-                         cond_dat$logGoogleFreq >= c_quantiles[(qi-1)],]
+        qt_dat <- cond_dat[cond_freq <= c_quantiles[qi] &
+                           cond_freq >= c_quantiles[(qi-1)],]
+        
+        qt_sub <- cond_sub[cond_freq <= c_quantiles[qi] &
+                           cond_freq >= c_quantiles[(qi-1)]]
       } else {
-        qt_dat <- cond_dat[cond_dat$logGoogleFreq < c_quantiles[qi] &
-                         cond_dat$logGoogleFreq >= c_quantiles[(qi-1)],]
+        qt_dat <- cond_dat[cond_freq < c_quantiles[qi] &
+                           cond_freq >= c_quantiles[(qi-1)],]
+        qt_sub <- cond_sub[cond_freq < c_quantiles[qi] &
+                           cond_freq >= c_quantiles[(qi-1)]]
       }
       
-      aggr_qt_dat <- ddply(qt_dat,"time",summarize,
-                           mEEG = mean(EEG))
+      all_sub_dat <- NULL
       
-      lines(aggr_qt_dat$time,
-           aggr_qt_dat$mEEG,
-           col=cond_col,
-           lty=(qi-1))
+      for (sub in levels(hsmm_dat$subjects_var)){
+        sub_dat <- qt_dat[qt_sub == sub,]
+        aggr_sub_dat <- colMeans(sub_dat,na.rm=T)
+        time <- seq(1,length(aggr_sub_dat)*s_len,by=s_len) - 200
+        
+        sub_dat <- data.frame("EEG"=aggr_sub_dat,
+                              "time"=time,
+                              "sub"=rep(sub,length(time)))
+        
+        all_sub_dat <- rbind(all_sub_dat,sub_dat)
+      }
+      
+      aggr_all <- ddply(all_sub_dat,c("time"),summarize,
+                        mEEG = mean(EEG),
+                        seEEG = se(EEG))
+      
+      plot_error(aggr_all$time,
+                 aggr_all$mEEG,
+                 aggr_all$seEEG,
+                 col=cond_col,
+                 lty=(qi-1),
+                 shade=T)
     }
   }
 }

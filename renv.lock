@@ -9,6 +9,14 @@
     ]
   },
   "Packages": {
+    "MASS": {
+      "Package": "MASS",
+      "Version": "7.3-58.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "762e1804143a332333c054759f89a706",
+      "Requirements": []
+    },
     "Matrix": {
       "Package": "Matrix",
       "Version": "1.5-1",
@@ -84,13 +92,16 @@
       "Hash": "ae6cbbe1492f4de79c45fce06f967ce8",
       "Requirements": []
     },
-    "backports": {
-      "Package": "backports",
-      "Version": "1.4.1",
+    "RcppEigen": {
+      "Package": "RcppEigen",
+      "Version": "0.3.3.9.3",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "c39fbec8a30d23e721980b8afb31984c",
-      "Requirements": []
+      "Hash": "1e035db628cefb315c571202d70202fe",
+      "Requirements": [
+        "Matrix",
+        "Rcpp"
+      ]
     },
     "base64enc": {
       "Package": "base64enc",
@@ -99,23 +110,6 @@
       "Repository": "CRAN",
       "Hash": "543776ae6848fde2f48ff3816d0628bc",
       "Requirements": []
-    },
-    "broom": {
-      "Package": "broom",
-      "Version": "1.0.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "fd25391c3c4f6ecf0fa95f1e6d15378c",
-      "Requirements": [
-        "backports",
-        "ellipsis",
-        "glue",
-        "lifecycle",
-        "purrr",
-        "rlang",
-        "stringr",
-        "tidyr"
-      ]
     },
     "bslib": {
       "Package": "bslib",
@@ -154,28 +148,20 @@
       "Hash": "89e6d8219950eac806ae0c489052048a",
       "Requirements": []
     },
-    "colorspace": {
-      "Package": "colorspace",
-      "Version": "2.1-0",
+    "corrplot": {
+      "Package": "corrplot",
+      "Version": "0.92",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "f20c47fd52fae58b4e377c37bb8c335b",
+      "Hash": "fcf11a91936fd5047b2ee9bc00595e36",
       "Requirements": []
     },
-    "cpp11": {
-      "Package": "cpp11",
-      "Version": "0.4.6",
+    "deldir": {
+      "Package": "deldir",
+      "Version": "1.0-9",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "707fae4bbf73697ec8d85f9d7076c061",
-      "Requirements": []
-    },
-    "curl": {
-      "Package": "curl",
-      "Version": "5.1.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "9123f3ef96a2c1a93927d828b2fe7d4c",
+      "Hash": "81dc74aa2dbe87672a8f73934fcf2dae",
       "Requirements": []
     },
     "digest": {
@@ -202,22 +188,6 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "4b68aa51edd89a0e044a66e75ae3cc6c",
-      "Requirements": []
-    },
-    "fansi": {
-      "Package": "fansi",
-      "Version": "1.0.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "3e8583a60163b4bc1a80016e63b9959e",
-      "Requirements": []
-    },
-    "farver": {
-      "Package": "farver",
-      "Version": "2.1.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "8106d78941f34855c440ddb946b8f7a5",
       "Requirements": []
     },
     "fastmap": {
@@ -268,6 +238,18 @@
         "rlang"
       ]
     },
+    "interp": {
+      "Package": "interp",
+      "Version": "1.1-4",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "3fff1eabca2e23beba50982e9b6fccaa",
+      "Requirements": [
+        "Rcpp",
+        "RcppEigen",
+        "deldir"
+      ]
+    },
     "itsadug": {
       "Package": "itsadug",
       "Version": "2.4.1",
@@ -278,6 +260,14 @@
         "mgcv",
         "plotfunctions"
       ]
+    },
+    "jpeg": {
+      "Package": "jpeg",
+      "Version": "0.1-10",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "031a0b683d001a7519202f0628fc0358",
+      "Requirements": []
     },
     "jquerylib": {
       "Package": "jquerylib",
@@ -310,14 +300,6 @@
         "yaml"
       ]
     },
-    "labeling": {
-      "Package": "labeling",
-      "Version": "0.4.3",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "b64ec208ac5bc1852b285f665d6368b3",
-      "Requirements": []
-    },
     "lattice": {
       "Package": "lattice",
       "Version": "0.20-45",
@@ -325,6 +307,21 @@
       "Repository": "CRAN",
       "Hash": "b64cdbb2b340437c4ee047a1f4c4377b",
       "Requirements": []
+    },
+    "latticeExtra": {
+      "Package": "latticeExtra",
+      "Version": "0.6-30",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "0857b103442b4657416508733c8c6678",
+      "Requirements": [
+        "MASS",
+        "RColorBrewer",
+        "interp",
+        "jpeg",
+        "lattice",
+        "png"
+      ]
     },
     "lifecycle": {
       "Package": "lifecycle",
@@ -336,18 +333,6 @@
         "cli",
         "glue",
         "rlang"
-      ]
-    },
-    "magick": {
-      "Package": "magick",
-      "Version": "2.8.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "88a1be45614781633df69ab666d66143",
-      "Requirements": [
-        "Rcpp",
-        "curl",
-        "magrittr"
       ]
     },
     "magrittr": {
@@ -388,16 +373,6 @@
       "Hash": "18e9c28c1d3ca1560ce30658b22ce104",
       "Requirements": []
     },
-    "munsell": {
-      "Package": "munsell",
-      "Version": "0.5.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "6dfe8bf774944bd5595785e3229d8771",
-      "Requirements": [
-        "colorspace"
-      ]
-    },
     "nlme": {
       "Package": "nlme",
       "Version": "3.1-160",
@@ -426,19 +401,13 @@
         "Rcpp"
       ]
     },
-    "purrr": {
-      "Package": "purrr",
-      "Version": "1.0.2",
+    "png": {
+      "Package": "png",
+      "Version": "0.1-8",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "1cba04a4e9414bdefc9dcaa99649a8dc",
-      "Requirements": [
-        "cli",
-        "lifecycle",
-        "magrittr",
-        "rlang",
-        "vctrs"
-      ]
+      "Hash": "bd54ba8a0a5faded999a7aab6e46b374",
+      "Requirements": []
     },
     "rappdirs": {
       "Package": "rappdirs",
@@ -497,22 +466,13 @@
         "rlang"
       ]
     },
-    "scales": {
-      "Package": "scales",
-      "Version": "1.2.1",
+    "stringdist": {
+      "Package": "stringdist",
+      "Version": "0.9.10",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "906cb23d2f1c5680b8ce439b44c6fa63",
-      "Requirements": [
-        "R6",
-        "RColorBrewer",
-        "farver",
-        "labeling",
-        "lifecycle",
-        "munsell",
-        "rlang",
-        "viridisLite"
-      ]
+      "Hash": "d68492ba784c0797d9e49f8182bc98d4",
+      "Requirements": []
     },
     "stringi": {
       "Package": "stringi",
@@ -538,24 +498,6 @@
         "vctrs"
       ]
     },
-    "tidyr": {
-      "Package": "tidyr",
-      "Version": "1.3.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "e47debdc7ce599b070c8e78e8ac0cfcf",
-      "Requirements": [
-        "cli",
-        "cpp11",
-        "glue",
-        "lifecycle",
-        "magrittr",
-        "purrr",
-        "rlang",
-        "stringr",
-        "vctrs"
-      ]
-    },
     "tinytex": {
       "Package": "tinytex",
       "Version": "0.43",
@@ -565,14 +507,6 @@
       "Requirements": [
         "xfun"
       ]
-    },
-    "utf8": {
-      "Package": "utf8",
-      "Version": "1.2.3",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "1fe17157424bb09c48a8b3b550c753bc",
-      "Requirements": []
     },
     "vctrs": {
       "Package": "vctrs",
@@ -587,21 +521,19 @@
         "rlang"
       ]
     },
-    "viridisLite": {
-      "Package": "viridisLite",
-      "Version": "0.4.2",
-      "Source": "Repository",
+    "vwr": {
+      "Package": "vwr",
+      "Version": "0.3.0",
+      "Source": "Local",
       "Repository": "CRAN",
-      "Hash": "c826c7c4241b6fc89ff55aaea3fa7491",
-      "Requirements": []
-    },
-    "withr": {
-      "Package": "withr",
-      "Version": "2.5.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "d77c6f74be05c33164e33fbc85540cae",
-      "Requirements": []
+      "RemoteType": "local",
+      "RemoteUrl": "/Users/joshmac/Downloads/vwr_0.3.0.tar",
+      "Hash": "55efb9e7b67c33e6ab55071ae6724417",
+      "Requirements": [
+        "lattice",
+        "latticeExtra",
+        "stringdist"
+      ]
     },
     "xfun": {
       "Package": "xfun",

@@ -6,3 +6,4 @@ results/*
 *.Rhistory
 *.Rprofile
 *.Rproj
+data/*.Rdata
