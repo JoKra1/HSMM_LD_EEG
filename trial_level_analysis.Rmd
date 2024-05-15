@@ -20,7 +20,7 @@ words_col <- brewer.pal(12, 'Paired')[6]
 non_word_col <- c('#17bce5',brewer.pal(12, 'Paired')[2])
 
 # Color for recovered stages
-colrc <- brewer.pal(6, "Paired")
+colrc <- brewer.pal(7, "Paired")
 ```
 
 ## Data Loading
@@ -44,6 +44,10 @@ rm(dlp.items,dlp.stimuli)
 # Extract words for easy OLD calculation
 dlp_words <- as.character(droplevels(dlp$spelling[dlp$lexicality == "W"]))
 
+# Subtlex vs. Celex differences example:
+sum((dlp$subtlex.frequency.million[!is.na(dlp$subtlex.frequency.million)] > dlp$subtlex.frequency.million[dlp$spelling == "vermoord"])*1)/nrow(dlp[!is.na(dlp$subtlex.frequency.million),])
+sum((dlp$celex.frequency[!is.na(dlp$celex.frequency)] > dlp$celex.frequency[dlp$spelling == "vermoord"])*1)/nrow(dlp[!is.na(dlp$celex.frequency),])
+
 hsmm_dat$subjects_var <- as.factor(hsmm_dat$subjects_var)
 hsmm_dat$blocks_var <- as.factor(hsmm_dat$blocks_var)
 
@@ -52,10 +56,10 @@ hsmm_dat$conditions[hsmm_dat$conditions == 2] <- "PW"
 hsmm_dat$conditions[hsmm_dat$conditions == 3] <- "RS"
 hsmm_dat$conditions <- as.factor(hsmm_dat$conditions)
 
-hsmm_dat$logGoogleFreq <- -1
-hsmm_dat$foreign <- -1
-hsmm_dat$logSubtlex <- -1
-hsmm_dat$logOLD <- -1
+hsmm_dat$logGoogleFreq <- NA
+hsmm_dat$foreign <- NA
+hsmm_dat$logSubtlex <- NA
+hsmm_dat$logOLD <- NA
 
 for(stim in unique(hsmm_dat$stims_var)){
   stim_cond <- unique(hsmm_dat$conditions[hsmm_dat$stims_var == stim])
@@ -93,6 +97,9 @@ stimuli$logCelexW[!is.finite(stimuli$logCelexW)] <- NA
 
 # Collect trial-level EEG data as well
 matlab_dat <- readMat("./data/data4HMM_baseline_LD_excl_6_15_bs_100_.mat")
+
+# Combine shared fifth stage and extra stage for pseudo-words
+hsmm_dat$durations_65 <- hsmm_dat$durations_6 + hsmm_dat$durations_5
 ```
 
 ## Correlation matrix Google frequency
@@ -122,7 +129,8 @@ par(mfrow=c(1,1))
 plot(stimuli$logFreqW,stimuli$logSubtlexW,
      col=words_col,pch=16,
      xlab="Log(Google frequency)",
-     ylab="Log(SUBTLEX frequency)")
+     ylab="Log(SUBTLEX frequency)",
+     xlim=c(0,25))
 
 # Separate color for foreign words
 points(stimuli$logFreqW[stimuli$foreign == 1],
@@ -132,12 +140,14 @@ points(stimuli$logFreqW[stimuli$foreign == 1],
 plot(stimuli$logFreqPW,stimuli$logSubtlexW,
      col=non_word_col[2],pch=16,
      xlab="Log(Google frequency)",
-     ylab="Log(SUBTLEX frequency)")
+     ylab="Log(SUBTLEX frequency)",
+     xlim=c(0,25))
 
 plot(stimuli$logFreqRS,stimuli$logOLDRS,
      col=non_word_col[1],pch=16,
      xlab="Log(Google frequency)",
-     ylab="Log(OLD20)")
+     ylab="Log(OLD20)",
+     xlim=c(0,25))
 
 # Densities
 emptyPlot(xlim=c(0,25),ylim=c(0,0.2),
@@ -161,6 +171,10 @@ lines(density(stimuli$logOLDRS[!is.na(stimuli$logOLDRS)],cut=0),col = alpha(non_
 
 ## Average results
 ```{r}
+# Stage 5 = extra stage only present for pw
+# Stage 6 = shared fifth stage in the manuscript
+# Stage 7 = shared sixth stage in the manuscript
+
 # Average stage duration per subject
 subj_avg <- ddply(hsmm_dat,c("subjects_var","conditions"),summarize,
                   d1 = mean(durations_1),
@@ -168,7 +182,8 @@ subj_avg <- ddply(hsmm_dat,c("subjects_var","conditions"),summarize,
                   d3 = mean(durations_3),
                   d4 = mean(durations_4),
                   d5 = mean(durations_5),
-                  d6 = mean(durations_6))
+                  d6 = mean(durations_6),
+                  d7 = mean(durations_7))
 
 # conditions averages + standard error over subjects
 cond_avg <- ddply(subj_avg,c("conditions"),summarize,
@@ -178,15 +193,17 @@ cond_avg <- ddply(subj_avg,c("conditions"),summarize,
                   sd4 = se(d4),
                   sd5 = se(d5),
                   sd6 = se(d6),
+                  sd7 = se(d7),
                   d1 = mean(d1),
                   d2 = mean(d2),
                   d3 = mean(d3),
                   d4 = mean(d4),
                   d5 = mean(d5),
-                  d6 = mean(d6))
+                  d6 = mean(d6),
+                  d7 = mean(d7))
 
-cond_means <- t(as.matrix(cond_avg[,8:13]))
-cond_ses <- t(as.matrix(cond_avg[,2:7]))
+cond_means <- t(as.matrix(cond_avg[,9:15]))
+cond_ses <- t(as.matrix(cond_avg[,2:8]))
 colnames(cond_means) <- cond_avg$conditions
 colnames(cond_ses) <- cond_avg$conditions
 
@@ -197,7 +214,7 @@ cond_means
 cond_ses
 
 # Plots (topologies can be found in ./results/plots)
-emptyPlot(c(1,6),
+emptyPlot(c(1,7),
           c(50,400),
           xlab="Processing Stage",
           ylab="Stage Duration",
@@ -206,19 +223,19 @@ emptyPlot(c(1,6),
           ymark=NULL,
           main="")
 
-lines(1:6,cond_means[,1],col=non_word_col[2])
-points(1:6,cond_means[,1],col=non_word_col[2],cex=1,pch=16)
-errorBars(1:6,cond_means[,1],cond_ses[,1],lwd=1,col=non_word_col[2])
+lines(1:7,cond_means[,1],col=non_word_col[2])
+points(1:7,cond_means[,1],col=non_word_col[2],cex=1,pch=16)
+errorBars(1:7,cond_means[,1],cond_ses[,1],lwd=1,col=non_word_col[2])
 
-lines(1:6,cond_means[,2],col=non_word_col[1])
-points(1:6,cond_means[,2],col=non_word_col[1],cex=1,pch=16)
-errorBars(1:6,cond_means[,2],cond_ses[,2],lwd=1,col=non_word_col[1])
+lines(c(1,2,3,4,6,7),cond_means[c(1,2,3,4,6,7),2],col=non_word_col[1])
+points(c(1,2,3,4,6,7),cond_means[c(1,2,3,4,6,7),2],col=non_word_col[1],cex=1,pch=16)
+errorBars(c(1,2,3,4,6,7),cond_means[c(1,2,3,4,6,7),2],cond_ses[c(1,2,3,4,6,7),2],lwd=1,col=non_word_col[1])
 
-lines(1:6,cond_means[,3],col=words_col)
-points(1:6,cond_means[,3],col=words_col,cex=1,pch=16)
-errorBars(1:6,cond_means[,3],cond_ses[,3],lwd=1,col=words_col)
+lines(c(1,2,3,4,6,7),cond_means[c(1,2,3,4,6,7),3],col=words_col)
+points(c(1,2,3,4,6,7),cond_means[c(1,2,3,4,6,7),3],col=words_col,cex=1,pch=16)
+errorBars(c(1,2,3,4,6,7),cond_means[c(1,2,3,4,6,7),3],cond_ses[c(1,2,3,4,6,7),3],lwd=1,col=words_col)
 
-for(st in 1:6){
+for(st in 1:7){
   text(st,max(cond_means[st,]),st,pos=3)
 }
 
@@ -256,6 +273,17 @@ for (c in c(2,1,3)){
   text(-10,start_y+(bar_height/2),c_labels[c],pos=2,xpd=NA)
   start_y <- start_y + bar_height + bar_spacing
 }
+
+# Check correlations between stage 5 and 6
+cor(hsmm_dat$durations_65[hsmm_dat$conditions == "W"],
+    hsmm_dat$durations_7[hsmm_dat$conditions == "W"])
+
+cor(hsmm_dat$durations_65[hsmm_dat$conditions == "PW"],
+    hsmm_dat$durations_7[hsmm_dat$conditions == "PW"])
+
+cor(hsmm_dat$durations_65[hsmm_dat$conditions == "RS"],
+    hsmm_dat$durations_7[hsmm_dat$conditions == "RS"])
+
 ```
 
 ## Trial-level results
@@ -287,15 +315,18 @@ m4 <- bam(log(durations_4) ~ conditions + s(logGoogleFreq,by=conditions) +
                        s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
           data=hsmm_dat)
 
-m5 <- bam(log(durations_5) ~ conditions + s(logGoogleFreq,by=conditions) +
+m5 <- bam(log(durations_65) ~ conditions + s(logGoogleFreq,by=conditions) +
                        s(trials_var,subjects_var,bs="fs",m=1) + 
                        s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
           data=hsmm_dat)
 
-m6 <- bam(log(durations_6) ~ conditions + s(logGoogleFreq,by=conditions) +
+m6 <- bam(log(durations_7) ~ conditions + s(logGoogleFreq,by=conditions) +
                        s(trials_var,subjects_var,bs="fs",m=1) + 
                        s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
           data=hsmm_dat)
+
+# Store fitted m6 values for later correlation analysis
+m6_fitted <- m6$fitted.values
 
 models <- list(m1,m2,m3,m4,m5,m6)
 
@@ -401,7 +432,7 @@ maxs <- c(min(max(hsmm_dat$logGoogleFreq[hsmm_dat$conditions == "W"]),
 # Black line = estimated difference of the effect of frequency for two
 # conditions. Only evaluated over the frequency range that is valid for both
 # conditions.
-# Shaded area: 95% certainty interval around the difference (see Wood, 2017)
+# Shaded area: Bonferroni certainty interval around the difference (see Wood, 2017)
 # Red bars: Frequency ranges in which the certainty interval does not include
 # zero.
 par(mfrow=c(2,3))
@@ -422,9 +453,163 @@ for (mi in 1:length(models)) {
               n.grid=500,
               xlim = c(mins[diff_i],
                        maxs[diff_i]),
-              add=T)
+              add=T,
+              se=qnorm((1 - (0.05/36/2)))) # Bonferroni-corrected confidence intervals
   }
 }
+
+# Alternatively, we can also consider the AIC difference to check whether the
+# three-way interaction offers a better account to the data:
+
+# Reduced models - including only main effects of frequency
+m1r <- bam(log(durations_1) ~ conditions + s(logGoogleFreq) +
+                       s(trials_var,subjects_var,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
+          data=hsmm_dat)
+
+m2r <- bam(log(durations_2) ~ conditions + s(logGoogleFreq) +
+                       s(trials_var,subjects_var,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
+          data=hsmm_dat)
+
+m3r <- bam(log(durations_3) ~ conditions + s(logGoogleFreq) +
+                       s(trials_var,subjects_var,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
+          data=hsmm_dat)
+
+m4r <- bam(log(durations_4) ~ conditions + s(logGoogleFreq) +
+                       s(trials_var,subjects_var,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
+          data=hsmm_dat)
+
+m5r <- bam(log(durations_65) ~ conditions + s(logGoogleFreq) +
+                       s(trials_var,subjects_var,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
+          data=hsmm_dat)
+
+m6r <- bam(log(durations_7) ~ conditions + s(logGoogleFreq) +
+                       s(trials_var,subjects_var,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
+          data=hsmm_dat)
+
+models_r <- list(m1r,m2r,m3r,m4r,m5r,m6r)
+
+for(mi in 1:6){
+  
+  cat(paste0("AIC diff: ",AIC(models_r[[mi]]) - AIC(models[[mi]]),"\n"))
+}
+
+# Reset conditions to W, PW, and RS again:
+hsmm_dat$conditions <- as.character(hsmm_dat$conditions)
+hsmm_dat$conditions[hsmm_dat$conditions == "FW"] <- "W"
+hsmm_dat$conditions <- as.factor(hsmm_dat$conditions)
+```
+
+### Shared model for all stages
+```{r}
+# Adjusted the condition variable again to treat foreign words as a separate condition.
+hsmm_dat$conditions <- as.character(hsmm_dat$conditions)
+hsmm_dat$conditions[hsmm_dat$foreign == 1] <- "FW"
+hsmm_dat$conditions <- as.factor(hsmm_dat$conditions)
+
+hsmm_dat_long <- NULL
+
+for (stage in 1:6){
+  if (stage == 5){
+    # Take combined duration of shared and extra stage for pw
+    stage_label <- "durations_65"
+  } else if (stage == 6){
+    stage_label <- "durations_7"
+  } else {
+    stage_label <- paste0("durations_",stage)
+  }
+  stage_hsmm_dat <- hsmm_dat
+  stage_hsmm_dat$durations <- stage_hsmm_dat[,stage_label]
+  stage_hsmm_dat$stage <- stage
+  hsmm_dat_long <- rbind(hsmm_dat_long,stage_hsmm_dat)
+}
+hsmm_dat_long$stage_cond <- paste0(hsmm_dat_long$stage,"_",hsmm_dat_long$conditions)
+hsmm_dat_long$stage_cond <- as.factor(hsmm_dat_long$stage_cond)
+hsmm_dat_long$stage <- as.factor(hsmm_dat_long$stage)
+hsmm_dat_long$conditions_ord <- as.ordered(hsmm_dat_long$conditions)
+hsmm_dat_long <- droplevels(hsmm_dat_long)
+
+if (T){
+  m_shared <- bam(log(durations) ~ stage_cond + s(logGoogleFreq,by=stage_cond) +
+                       s(trials_var,subjects_var,by=stage,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=stage_cond,bs="fs",m=1),
+            data=hsmm_dat_long)
+  
+  m_shared_simpler <- bam(log(durations) ~ stage_cond + s(logGoogleFreq,by=stage)
+                          + s(logGoogleFreq,by=conditions_ord) +
+                       s(trials_var,subjects_var,by=stage,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=stage_cond,bs="fs",m=1),
+            data=hsmm_dat_long)
+  
+  saveRDS(m_shared,file="./results/models/m_shared.RDS")
+  saveRDS(m_shared_simpler,file="./results/models/m_shared_simpler.RDS")
+} else {
+  m_shared <- readRDS("./results/models/m_shared.RDS")
+  m_shared_simpler <- readRDS("./results/models/m_shared_simpler.RDS")
+}
+
+par(mfrow=c(2,3))
+for (mi in 1:6) {
+  
+  # Plots of the estimated effects of frequency evaluated over
+  # the frequency range applicable to every word type.
+  emptyPlot(c(0,25),
+            c(min(fitted(m_shared)),
+              max(fitted(m_shared))),
+            xlab="Log(Google frequency)",
+            ylab=paste0("Pred. Log(Stage ",mi," duration)"),
+            bty="n")
+  
+  plot_smooth(m_shared,
+              view="logGoogleFreq",
+              cond = list("stage_cond"=paste0(mi,"_RS"),"stage"=mi),
+              col=non_word_col[1],
+              n.grid=500,
+              xlim = c(min(stimuli$logFreqRS,na.rm = T),
+                       max(stimuli$logFreqRS,na.rm = T)),
+              add=T)
+  
+  plot_smooth(m_shared,
+              view="logGoogleFreq",
+              cond = list("stage_cond"=paste0(mi,"_PW"),"stage"=mi),
+              col=non_word_col[2],
+              n.grid=500,
+              xlim = c(min(stimuli$logFreqPW,na.rm = T),
+                       max(stimuli$logFreqPW,na.rm = T)),
+              add=T)
+  
+  plot_smooth(m_shared,
+              view="logGoogleFreq",
+              cond = list("stage_cond"=paste0(mi,"_W"),"stage"=mi),
+              col=words_col,
+              n.grid=500,
+              xlim = c(min(stimuli$logFreqW[stimuli$foreign == 0],na.rm = T),
+                       max(stimuli$logFreqW[stimuli$foreign == 0],na.rm = T)),
+              add=T)
+  
+  plot_smooth(m_shared,
+              view="logGoogleFreq",
+              cond = list("stage_cond"=paste0(mi,"_FW"),"stage"=mi),
+              n.grid=500,
+              col="purple",
+              xlim = c(min(stimuli$logFreqW[stimuli$foreign == 1],na.rm = T),
+                       max(stimuli$logFreqW[stimuli$foreign == 1],na.rm = T)),
+              add=T)
+}
+
+# Check AIC
+AIC(m_shared_simpler) - AIC(m_shared)
+
+# Problems with this model: sigma should clearly be a function of stage.
+plot(resid(m_shared),col=rep(colrc,each=nrow(hsmm_dat)))
+plot(fitted(m_shared),resid(m_shared),col=rep(colrc,each=nrow(hsmm_dat)))
+qqnorm(resid(m_shared))
+qqline(resid(m_shared))
 
 # Reset conditions to W, PW, and RS again:
 hsmm_dat$conditions <- as.character(hsmm_dat$conditions)
@@ -461,12 +646,12 @@ m4 <- bam(log(durations_4) ~ s(logSubtlex) +
                        s(logSubtlex,subjects_var,bs="fs",m=1),
           data=droplevels(hsmm_dat[hsmm_dat$conditions == "W",]))
 
-m5 <- bam(log(durations_5) ~ s(logSubtlex) +
+m5 <- bam(log(durations_65) ~ s(logSubtlex) +
                        s(trials_var,subjects_var,bs="fs",m=1) + 
                        s(logSubtlex,subjects_var,bs="fs",m=1),
           data=droplevels(hsmm_dat[hsmm_dat$conditions == "W",]))
 
-m6 <- bam(log(durations_6) ~ s(logSubtlex) +
+m6 <- bam(log(durations_7) ~ s(logSubtlex) +
                        s(trials_var,subjects_var,bs="fs",m=1) + 
                        s(logSubtlex,subjects_var,bs="fs",m=1),
           data=droplevels(hsmm_dat[hsmm_dat$conditions == "W",]))
@@ -568,4 +753,162 @@ for (ch in c(13,16)) {
     }
   }
 }
+```
+
+### Frequency Analysis
+```{r}
+# Adjusted the condition variable again to treat foreign words as a separate condition.
+hsmm_dat$conditions <- as.character(hsmm_dat$conditions)
+hsmm_dat$conditions[hsmm_dat$foreign == 1] <- "FW"
+hsmm_dat$conditions <- as.factor(hsmm_dat$conditions)
+
+# Stage 6 = Stage 5b for pseudo-words
+m6 <- bam(log(durations_6) ~ conditions + s(logGoogleFreq,by=conditions) +
+                       s(trials_var,subjects_var,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
+          data=hsmm_dat)
+
+# Stage 65 = Stage 5a + 5b for pseudo-words
+m65 <- bam(log(durations_65) ~ conditions + s(logGoogleFreq,by=conditions) +
+                       s(trials_var,subjects_var,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
+           data=hsmm_dat)
+
+# Stage 65a = Stage 5a for pseudo-words
+hsmm_dat$durations_65a <- hsmm_dat$durations_6
+hsmm_dat$durations_65a[hsmm_dat$condition == "PW"] <- hsmm_dat$durations_5[hsmm_dat$condition == "PW"]
+
+m65a <- bam(log(durations_65a)  ~ conditions + s(logGoogleFreq,by=conditions) +
+                       s(trials_var,subjects_var,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
+             data=hsmm_dat)
+
+mRT <- bam(log(rts_var) ~ conditions + s(logGoogleFreq,by=conditions) +
+                       s(trials_var,subjects_var,bs="fs",m=1) + 
+                       s(logGoogleFreq,subjects_var,by=conditions,bs="fs",m=1),
+           data=hsmm_dat)
+
+# Plot RT effects
+emptyPlot(xlim=c(0,25),ylim=c(6,7.1),
+       xlab="Log(Google frequency)",
+       ylab="Log(Reaction time)")
+  
+plot_smooth(mRT,
+            view="logGoogleFreq",
+            cond = list("conditions"="RS"),
+            col=non_word_col[1],
+            n.grid=500,
+            xlim = c(min(stimuli$logFreqRS,na.rm = T),
+                     max(stimuli$logFreqRS,na.rm = T)),
+            add=T)
+
+plot_smooth(mRT,
+            view="logGoogleFreq",
+            cond = list("conditions"="PW"),
+            col=non_word_col[2],
+            n.grid=500,
+            xlim = c(min(stimuli$logFreqPW,na.rm = T),
+                     max(stimuli$logFreqPW,na.rm = T)),
+            add=T)
+
+plot_smooth(mRT,
+            view="logGoogleFreq",
+            cond = list("conditions"="W"),
+            col=words_col,
+            n.grid=500,
+            xlim = c(min(stimuli$logFreqW[stimuli$foreign == 0],na.rm = T),
+                     max(stimuli$logFreqW[stimuli$foreign == 0],na.rm = T)),
+            add=T)
+
+plot_smooth(mRT,
+            view="logGoogleFreq",
+            cond = list("conditions"="FW"),
+            n.grid=500,
+            col=alpha("purple",0.6),
+            xlim = c(min(stimuli$logFreqW[stimuli$foreign == 1],na.rm = T),
+                     max(stimuli$logFreqW[stimuli$foreign == 1],na.rm = T)),
+            add=T)
+
+# Plot Stage 5 effects (5a + 5b for pseudo-words)
+emptyPlot(xlim=c(0,25),ylim=c(4,7),
+       xlab="Log(Google frequency)",
+       ylab="Log(Stage duration)")
+  
+plot_smooth(m65,
+            view="logGoogleFreq",
+            cond = list("conditions"="RS"),
+            col=non_word_col[1],
+            n.grid=500,
+            xlim = c(min(stimuli$logFreqRS,na.rm = T),
+                     max(stimuli$logFreqRS,na.rm = T)),
+            add=T)
+
+plot_smooth(m65,
+            view="logGoogleFreq",
+            cond = list("conditions"="PW"),
+            col=non_word_col[2],
+            n.grid=500,
+            xlim = c(min(stimuli$logFreqPW,na.rm = T),
+                     max(stimuli$logFreqPW,na.rm = T)),
+            add=T)
+
+plot_smooth(m65,
+            view="logGoogleFreq",
+            cond = list("conditions"="W"),
+            col=words_col,
+            n.grid=500,
+            xlim = c(min(stimuli$logFreqW[stimuli$foreign == 0],na.rm = T),
+                     max(stimuli$logFreqW[stimuli$foreign == 0],na.rm = T)),
+            add=T)
+
+plot_smooth(m65,
+            view="logGoogleFreq",
+            cond = list("conditions"="FW"),
+            n.grid=500,
+            col=alpha("purple",0.6),
+            xlim = c(min(stimuli$logFreqW[stimuli$foreign == 1],na.rm = T),
+                     max(stimuli$logFreqW[stimuli$foreign == 1],na.rm = T)),
+            add=T)
+
+# Plot Stage 5 effects for 5a+5b, 5a, and 5b separately for pseudo-words
+emptyPlot(xlim=c(0,25),ylim=c(4,7),
+       xlab="Log(Google frequency)",
+       ylab="Log(Stage duration)")
+
+plot_smooth(m65,
+            view="logGoogleFreq",
+            cond = list("conditions"="PW"),
+            col=non_word_col[2],
+            n.grid=500,
+            xlim = c(min(stimuli$logFreqPW,na.rm = T),
+                     max(stimuli$logFreqPW,na.rm = T)),
+            add=T)
+
+plot_smooth(m6, # 5b
+            view="logGoogleFreq",
+            cond = list("conditions"="PW"),
+            col=non_word_col[2],
+            n.grid=500,
+            xlim = c(min(stimuli$logFreqPW,na.rm = T),
+                     max(stimuli$logFreqPW,na.rm = T)),
+            add=T,lty=3)
+
+plot_smooth(m65a,
+            view="logGoogleFreq",
+            cond = list("conditions"="PW"),
+            col=non_word_col[2],
+            n.grid=500,
+            xlim = c(min(stimuli$logFreqPW,na.rm = T),
+                     max(stimuli$logFreqPW,na.rm = T)),
+            add=T,lty=2)
+
+# Correlation between fixed effects for RTs and stage five, stage six, and sub-stage 5b
+cor(m65$fitted,mRT$fitted)
+cor(m6_fitted,mRT$fitted)
+cor(m6$fitted,mRT$fitted)
+
+# Reset conditions to W, PW, and RS again:
+hsmm_dat$conditions <- as.character(hsmm_dat$conditions)
+hsmm_dat$conditions[hsmm_dat$conditions == "FW"] <- "W"
+hsmm_dat$conditions <- as.factor(hsmm_dat$conditions)
 ```

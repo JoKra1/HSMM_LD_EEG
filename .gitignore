@@ -7,3 +7,4 @@ results/*
 *.Rprofile
 *.Rproj
 data/*.Rdata
+revision_*
