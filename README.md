@@ -2,7 +2,7 @@
 
 ## Description:
 
-Code to perform the HsMM-MVPA model selection and trial-level GAMM analysis described in *Word type and frequency effects on lexical decisions are process-dependent and start early* (Krause, van Rij, & Borst; submitted). The code
+Code to perform the HsMM-MVPA model selection and trial-level GAMM analysis described in *Word type and frequency effects on lexical decisions are process-dependent and start early* [(Krause, van Rij, & Borst; 2024)](https://doi.org/10.1162/jocn_a_02214). The code
 makes use of the HsMM functions provided by Berberyan et al. (2021) that can be downloaded from [here](https://osf.io/z49me/files/). Additionally, the code requires a copy of the item-level DLP data (Keuleers et al., 2010), which can for example be downloaded [here](https://lib.ugent.be/catalog/pug01:1076200). The ``vwr`` R package is required for parts of the trial-level analysis but appears to no longer be on CRAN - the most recent version can still be downloaded from [here](https://CRAN.R-project.org/package=vwr) and then installed locally.
 
 ## Performing the analysis:
