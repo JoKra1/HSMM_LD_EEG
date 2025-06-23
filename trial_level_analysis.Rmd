@@ -63,6 +63,7 @@ hsmm_dat$logOLD <- NA
 
 for(stim in unique(hsmm_dat$stims_var)){
   stim_cond <- unique(hsmm_dat$conditions[hsmm_dat$stims_var == stim])
+  hsmm_dat$logOLD[hsmm_dat$stims_var == stim] <- log(old20(stim,dlp_words))
   
   if(stim_cond == "W"){
     hsmm_dat$logGoogleFreq[hsmm_dat$stims_var == stim] <- stimuli$logFreqW[stimuli$word == stim]
@@ -94,6 +95,14 @@ for(stim in unique(hsmm_dat$stims_var)){
   }
 }
 stimuli$logCelexW[!is.finite(stimuli$logCelexW)] <- NA
+
+# Export RT data
+rt_dat <- hsmm_dat[,colnames(hsmm_dat) %in% c("subjects_var","trials_var","rts_var",
+                                              "blocks_var","conditions","stims_var",
+                                              "logGoogleFreq","foreign","logSubtlex",
+                                              "logOLD")]
+
+write.table(rt_dat,file="./results/rt_dat.csv",sep=",",row.names = F)
 
 # Collect trial-level EEG data as well
 matlab_dat <- readMat("./data/data4HMM_baseline_LD_excl_6_15_bs_100_.mat")
